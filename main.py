@@ -5,7 +5,7 @@ import json
 from dotenv import load_dotenv
 from openai import OpenAI
 from prompts import system_prompt
-from call_functions import available_functions
+from call_functions import available_functions, call_function
 
 # Load environment variables from .env
 load_dotenv()
@@ -32,29 +32,37 @@ messages = [
     {"role": "user", "content": args.user_prompt},
 ]
 
+for _ in range(20):
 # Send a message to AI
-response = client.chat.completions.create(
-    model="openrouter/free",
-    messages=messages,
-    tools=available_functions,
-)
-if response.usage is None:
-    raise RuntimeError("Failed API reguest")
+    response = client.chat.completions.create(
+        model="openrouter/free",
+        messages=messages,
+        tools=available_functions,
+    )
+    if response.usage is None:
+        raise RuntimeError("Failed API reguest")
 
 
 # Print AI response
-if args.verbose == True:
-    print(f"User prompt: {args.user_prompt}")
-    print(f"Prompt tokens: {response.usage.prompt_tokens}")
-    print(f"Response tokens: {response.usage.completion_tokens}")
+    if args.verbose == True:
+        print(f"User prompt: {args.user_prompt}")
+        print(f"Prompt tokens: {response.usage.prompt_tokens}")
+        print(f"Response tokens: {response.usage.completion_tokens}")
 
 
-message = response.choices[0].message
+    message = response.choices[0].message
+    messages.append(message)
 
-if message.tool_calls:
-    for tool_call in message.tool_calls:
-        function_args = json.loads(tool_call.function.arguments or "{}")
-        print(f"Calling function: {tool_call.function.name}({function_args})")
+    if message.tool_calls:
+        for tool_call in message.tool_calls:
+            result_message = call_function(tool_call, args.verbose)
+            messages.append(result_message)
+            if not result_message["content"]:
+                raise Exception("Function call returned empty content")
+            print(f"-> {result_message['content']}")
+            
+    else:
+        print(message.content)
+        break
 else:
-    print(message.content)
-
+    print("Agent reached the maximum number of iterations without a final response.")
